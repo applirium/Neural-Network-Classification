@@ -94,7 +94,7 @@ while True:
     else:
         train_data = start_data + data_generation(choice - 20, True)
 
-    test_data = data_generation(40000, False)
+    test_data = data_generation(20000, False)
 
     coordinates_tensor_train, labels_tensor_train, coordinates_train = data_transform(train_data)
     coordinates_tensor_test, labels_tensor_test, coordinates_test = data_transform(test_data)
@@ -105,7 +105,9 @@ while True:
 
     train_losses = []
     test_losses = []
-    accuracies = []
+    accuracies_train = []
+    accuracies_test = []
+    prediction = []
 
     num_epochs = 50
     model.train()
@@ -117,6 +119,10 @@ while True:
         optimizer.step()
         train_losses.append(loss.item())  # Store training loss for each epoch
 
+        _, predicted_train_labels = torch.max(outputs.data, 1)
+        accuracy_train = torch.sum(predicted_train_labels == labels_tensor_train).item() / len(labels_tensor_train)
+        accuracies_train.append(accuracy_train * 100)
+
         # Evaluation on test data
         model.eval()
         with torch.no_grad():
@@ -124,56 +130,53 @@ while True:
             test_loss = criterion(predicted, labels_tensor_test)
             test_losses.append(test_loss.item())  # Store test loss for each epoch
 
-            _, predicted_labels = torch.max(predicted.data, 1)
-            accuracy = torch.sum(predicted_labels == labels_tensor_test).item() / len(labels_tensor_test)
-            accuracies.append(accuracy * 100)  # Store accuracy for each epoch
-            print(f"Epoch [{epoch + 1}/{num_epochs}] Training Loss: {loss.item():.4f} | Test Loss: {test_loss.item():.4f} | Accuracy: {accuracy * 100:.2f}%")
+            _, predicted_test_labels = torch.max(predicted.data, 1)
+            accuracy_test = torch.sum(predicted_test_labels == labels_tensor_test).item() / len(labels_tensor_test)
+            accuracies_test.append(accuracy_test * 100)
+            prediction.append([label_map_inverse[label] for label in predicted_test_labels.tolist()])
 
-    model.eval()
-    with torch.no_grad():
-        predicted = model(coordinates_tensor_test)
-        _, predicted_labels = torch.max(predicted.data, 1)
-
-    acc = 0
-    for i in range(len(predicted_labels)):
-        if predicted_labels[i] == labels_tensor_test[i]:
-            acc += 1
-    acc = (acc / len(predicted_labels)) * 100
-    print(f"Accuracy of model: {acc:.2f}%")
+            print(f"Epoch [{epoch + 1}/{num_epochs}] Training Loss: {loss.item():.4f} | Test Loss: {test_loss.item():.4f} | Accuracy: {accuracy_train * 100:.2f}% | Accuracy: {accuracy_test * 100:.2f}%")
 
     starting_labels = [label_map_inverse[label] for label in labels_tensor_train.tolist()]
-    predicted_labels = [label_map_inverse[label] for label in predicted_labels.tolist()]
-
+    plt.ion()
     fig, axes = plt.subplots(2, 2, figsize=(10, 10))
 
-    axes[0, 0].scatter(
-        [x for x, _ in coordinates_train],
-        [y for _, y in coordinates_train],
-        c=starting_labels,
-    )
-    axes[0, 0].set_xlabel('X-coordinate')
-    axes[0, 0].set_ylabel('Y-coordinate')
-    axes[0, 0].set_title(f'Training on {choice} elements')
+    for i in range(num_epochs):
+        plt.clf()
 
-    axes[0, 1].scatter(
-        [x for x, _ in coordinates_test],
-        [y for _, y in coordinates_test],
-        c=predicted_labels,
-    )
-    axes[0, 1].set_xlabel('X-coordinate')
-    axes[0, 1].set_ylabel('Y-coordinate')
-    axes[0, 1].set_title(f'Testing on 40k elements')
+        plt.subplot(2, 2, 1)
+        plt.scatter([x for x, _ in coordinates_train], [y for _, y in coordinates_train], c=starting_labels)
 
-    axes[1, 0].plot(train_losses, label='Training Loss')
-    axes[1, 0].plot(test_losses, label='Test Loss')
-    axes[1, 0].set_xlabel('Epochs')
-    axes[1, 0].set_ylabel('Loss')
-    axes[1, 0].set_title('Training and Test Losses over Epochs')
-    axes[1, 0].legend()
+        plt.xlabel('X-coordinate')
+        plt.ylabel('Y-coordinate')
+        plt.title(f'Training on {choice} elements')
 
-    axes[1, 1].plot(accuracies)
-    axes[1, 1].set_xlabel('Epochs')
-    axes[1, 1].set_ylabel('Accuracy (%)')
-    axes[1, 1].set_title('Accuracy over Epochs')
+        plt.subplot(2, 2, 2)
+        plt.scatter([x for x, _ in coordinates_test], [y for _, y in coordinates_test], c=prediction[i])
 
-    plt.show()
+        plt.xlabel('X-coordinate')
+        plt.ylabel('Y-coordinate')
+        plt.title(f'Epoch {i + 1} Testing ')
+
+        plt.subplot(2, 2, 3)
+        plt.plot(train_losses[0:i], label='Training Loss')
+        plt.plot(test_losses[0:i], label='Test Loss')
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.title('Training and Test Losses over Epochs')
+        plt.legend()
+
+        plt.subplot(2, 2, 4)
+        plt.plot(accuracies_train[0:i], label='Training Accuracy')
+        plt.plot(accuracies_test[0:i], label='Test Accuracy')
+        plt.xlabel('Epochs')
+        plt.ylabel('Accuracy (%)')
+        plt.title(f'Training and Test Accuracies over Epochs')
+        plt.legend()
+
+        plt.tight_layout()
+        plt.pause(0.01)
+        plt.draw()
+
+    plt.pause(5)
+    plt.close()
